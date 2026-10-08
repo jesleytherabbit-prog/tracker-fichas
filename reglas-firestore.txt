@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Fichas del Lector: cualquiera puede leer una ficha si tiene su código
+    // y guardar una nueva, pero nadie puede modificar ni borrar las existentes.
+    match /fichas/{codigo} {
+      allow read: if true;
+      allow create: if codigo.matches('^AK[0-9]{5}$')
+                    && request.resource.data.keys().hasOnly(['ficha', 'creada'])
+                    && request.resource.data.ficha is string
+                    && request.resource.data.ficha.matches('^AVK[01][.].*')
+                    && request.resource.data.ficha.size() < 200000;
+      allow update, delete: if false;
+    }
+  }
+}
