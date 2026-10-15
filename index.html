@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lector de Fichas</title>
+<style>[hidden]{display:none!important} body{margin:0} img{max-width:100%}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: herramienta de dos paneles (ficha en texto → JSON), se apila en móvil */
+:root{
+  --bg:#f3f2f6; --panel:#ffffff; --ink:#26222f; --muted:#6c6678; --line:#dcd8e4;
+  --accent:#5b4b8a; --accent-ink:#ffffff; --brass:#a77d2c; --code-bg:#f7f6fa;
+  --ok:#2f7a55; --warn:#a2601b; --warn-bg:#fbf1e4;
+  --f-display:"Cinzel", "Trajan Pro", Georgia, serif;
+  --f-body:"Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#17151d; --panel:#211e2a; --ink:#ebe7f2; --muted:#a39db0; --line:#36313f;
+  --accent:#a593e0; --accent-ink:#17151d; --brass:#d6ad5c; --code-bg:#1b1923;
+  --ok:#6fcf9d; --warn:#e7a960; --warn-bg:#2d2419; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#17151d; --panel:#211e2a; --ink:#ebe7f2; --muted:#a39db0; --line:#36313f;
+  --accent:#a593e0; --accent-ink:#17151d; --brass:#d6ad5c; --code-bg:#1b1923;
+  --ok:#6fcf9d; --warn:#e7a960; --warn-bg:#2d2419; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);padding:24px 16px 40px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding-bottom:14px}
+h1{font:700 clamp(22px,4vw,30px)/1.1 var(--f-display);letter-spacing:.06em;margin:0;text-wrap:balance}
+h1 span{color:var(--brass)}
+.sub{color:var(--muted);margin:6px 0 0;max-width:62ch}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width:820px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-width:0}
+.ph{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.ph h2{font:600 12px/1 var(--f-body);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0}
+textarea{width:100%;min-height:460px;border:0;resize:vertical;background:transparent;color:var(--ink);font:13px/1.55 var(--f-mono);padding:14px;outline:none}
+textarea:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}
+pre{margin:0;padding:14px;min-height:460px;max-height:640px;overflow:auto;background:var(--code-bg);font:12.5px/1.55 var(--f-mono);border-radius:0 0 10px 10px;white-space:pre}
+.k{color:var(--accent)} .s{color:var(--ok)} .n{color:var(--brass)}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+button{font:600 13px var(--f-body);border-radius:7px;padding:7px 12px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:hover{border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button[disabled]{opacity:.55;cursor:wait}
+.toggle{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.tabs{display:flex;gap:2px}
+.tabs button{border-radius:6px;padding:5px 10px;font-size:12px}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.status{font-size:13px;color:var(--muted);padding:10px 14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 14px}
+.status b{color:var(--ink);font-variant-numeric:tabular-nums}
+.avisos{margin:0;padding:10px 14px 12px 32px;background:var(--warn-bg);color:var(--warn);font-size:13px;border-top:1px solid var(--line)}
+.resumen{padding:14px;display:flex;flex-direction:column;gap:16px;min-height:460px;max-height:640px;overflow:auto}
+.pj h3{font:700 17px var(--f-display);letter-spacing:.04em;margin:0 0 8px}
+.attrs{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px}
+.attr{border:1px solid var(--line);border-radius:7px;padding:6px 8px;display:flex;justify-content:space-between;font-size:13px}
+.attr b{font-variant-numeric:tabular-nums;color:var(--brass)}
+.hab{font-size:13px;color:var(--muted);margin-top:8px;columns:2 180px;column-gap:18px}
+.hab div{break-inside:avoid;display:flex;justify-content:space-between;gap:8px;border-bottom:1px dotted var(--line);padding:2px 0}
+.hab div span:last-child{color:var(--ink);font-variant-numeric:tabular-nums}
+.how{font-size:14px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.how h2{font:600 12px/1 var(--f-body);letter-spacing:.12em;text-transform:uppercase;margin:0 0 8px;color:var(--ink)}
+.how ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.how code{font:12.5px var(--f-mono);background:var(--code-bg);padding:1px 5px;border-radius:4px;color:var(--ink)}
+.nube{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.nube input{font:600 13px var(--f-mono);text-transform:uppercase;letter-spacing:.06em;width:9.5em;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink)}
+.nube input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.corto{font:700 18px var(--f-mono);letter-spacing:.08em;color:var(--accent);user-select:all}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+<style>
+.counts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--muted)}
+.chip b{color:var(--ink);font-variant-numeric:tabular-nums}
+#codigo{white-space:pre-wrap;word-break:break-all}
+.opts{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Lector de <span>Fichas</span></h1>
+      <p class="sub">Pegá la ficha como la tengas: el texto copiado del foro, el código del post (BBCode y HTML) o la página del tema guardada (.htm). Sale en JSON o como código corto para cargar en otras herramientas. También podés pegar un código <code>AVK1.</code> para volver a ver la ficha.</p>
+    </div>
+    <div class="btns">
+      <button id="btn-archivo" type="button">Subir archivo</button>
+      <input id="archivo" type="file" accept=".htm,.html,.txt" hidden>
+      <button id="btn-limpiar" type="button">Vaciar</button>
+      <button id="btn-ejemplo" type="button">Cargar ejemplo</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="Ficha en texto">
+      <div class="ph"><h2>Ficha (texto, código del post o página)</h2>
+      </div>
+      <textarea id="entrada" spellcheck="false" placeholder="IRVIN GILES&#10;{Atributos»&#10;→ Vigor: 4&#10;..."></textarea>
+      <div class="status" id="status"></div>
+      <div class="nube">
+        <label for="corto-entrada">¿Tenés un código corto?</label>
+        <input id="corto-entrada" type="text" placeholder="AK48213" maxlength="10" autocomplete="off" spellcheck="false">
+        <button id="btn-cargar-nube" type="button">Cargar ficha</button>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Resultado">
+      <div class="ph">
+        <div class="tabs" role="tablist">
+          <button id="tab-json" type="button" role="tab" aria-selected="true">JSON</button>
+          <button id="tab-cod" type="button" role="tab" aria-selected="false">Código</button>
+          <button id="tab-res" type="button" role="tab" aria-selected="false">Resumen</button>
+        </div>
+        <div class="opts">
+          <label class="toggle"><input id="descripciones" type="checkbox"> Descripciones</label>
+          <label class="toggle"><input id="compacto" type="checkbox"> Compacto</label>
+          <button id="btn-copiar" type="button" class="primary">Copiar</button>
+        </div>
+      </div>
+      <pre id="salida" tabindex="0"></pre>
+      <pre id="codigo" tabindex="0" hidden></pre>
+      <div class="resumen" id="resumen" hidden></div>
+      <ul class="avisos" id="avisos" hidden></ul>
+      <div class="nube">
+        <button id="btn-guardar-nube" type="button" class="primary">Guardar en la nube</button>
+        <span id="nube-estado">Te da un código corto (ej. AK48213) para cargar la ficha en el tracker.</span>
+        <span class="corto" id="nube-codigo" hidden></span>
+        <button id="btn-copiar-corto" type="button" hidden>Copiar</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="how">
+    <h2>Cómo usarlo en otras herramientas</h2>
+    <ol>
+      <li>Pegá la ficha a la izquierda o subí la página del tema guardada desde el navegador (Ctrl+S). Si el tema tiene respuestas de otros usuarios o el registro de canjes, se ignoran. Revisá los avisos (niveles mal sumados, listas incompletas).</li>
+      <li><b>JSON</b> es legible y sirve para revisar. <b>Código</b> es la misma ficha comprimida (empieza con <code>AVK1.</code>): es lo que se pega en el tracker o en la calculadora.</li>
+      <li>“Descripciones” agrega los textos largos (historia, descripciones, trasfondos, talentos, objetos). Sin ellas el código queda mucho más corto.</li>
+    </ol>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const EJEMPLO = `CORALINE BASKERVILLE
+
+▋ Atributos: (Límites: ____)
+→ Vigor: 3
+→ Destreza: 2
+→ Carisma: 3
+→ Voluntad: 3
+→ Percepción: 4
+→ Inteligencia: 3
+→ Poder: 4
+
+▋ Habilidades:
+VIGOR:
+→ Atletismo: Competente (+2)
+→ Pelea: Experto (+4)
+DESTREZA:
+→ Esquiva: Experto (+4)
+→ Latrocinio: Desentrenado (+0)
+→ Sigilo: Competente (+2)
+→ Vuelo: Desentrenado (+0)
+CARISMA:
+→ Coordinación: Competente (+2)
+→ Intimidación: Experto (+4)
+→ Oratoria: Desentrenado (+0)
+→ Seducción: Competente (+2)
+→ Subterfugio: Experto (+4)
+VOLUNTAD:
+→ Artesanía (Cocina): Competente (+2)
+→ Arte (Canto): Competente (+2)
+→ Estilo: Desentrenado (+0)
+→ Frialdad: Experto (+4)
+PERCEPCIÓN:
+→ Alerta: Experto (+4)
+→ Consciencia: Experto (+4)
+→ Empatía: Experto (+4)
+→ Iniciativa: Experto (+4)
+→ Investigación: Experto (+4)
+INTELIGENCIA:
+→ Adivinación: Desentrenado (+0)
+→ Arcanismo: Novato (+1)
+→ Callejeo: Desentrenado (+0)
+→ Cultura Mágica: Desentrenado (+0)
+→ Cultura Muggle: Competente (+2)
+→ Herbología: Experto (+4)
+→ Magizoología: Desentrenado (+0)
+→ Medicina: Competente (+2)
+→ Política: Desentrenado (+0)
+→ Supervivencia: Desentrenado (+0)
+PODER:
+→ Duelo: Experto (+4)
+→ Pociones: Competente (+2)
+→ Rituales: Competente (+2)`;
+
+/* ---------- utilidades ---------- */
+const ATRIBUTOS = ["vigor","destreza","carisma","voluntad","percepcion","inteligencia","poder"];
+const HABILIDADES = new Set(["atletismo","pelea","esquiva","latrocinio","sigilo","vuelo","coordinacion","intimidacion","oratoria","seduccion","subterfugio","estilo","frialdad","alerta","consciencia","empatia","iniciativa","investigacion","adivinacion","arcanismo","callejeo","cultura_magica","cultura_muggle","herbologia","magizoologia","medicina","politica","supervivencia","duelo","pociones","rituales"]);
+const NIVELES = {desentrenado:0, desentrenada:0, novato:1, novata:1, competente:2, experto:4, experta:4, maestro:7, maestra:7, legendario:9, legendaria:9};
+const ROMANOS = {I:1,II:2,III:3,IV:4,V:5,VI:6,VII:7,VIII:8};
+const $ = id => document.getElementById(id);
+const sinTildes = s => s.normalize("NFD").replace(/[̀-ͯ]/g,"");
+const norm = s => sinTildes(s).toLowerCase().replace(/\s+/g," ").trim();
+const slug = s => norm(s).replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+const sinPunto = s => s.replace(/[\s.,;*]+$/,"").trim();
+const BULLET = /^(?:[\u2190-\u21FF\u2600-\u27BF\u2B00-\u2BFF•●○◦·▪▫■□◆◇†‡ϟ]|-+>|=+>|\*(?=\s)|-(?=\s)|[-–—](?=(?:Bibliotecas?|Influencias?|Inform\w*|Seguidores)\b))\s*/;
+const SIMBOLOS_FIN = /\s*[\u2190-\u21FF\u2600-\u27BF\u2B00-\u2BFF•●○◦·▪▫■□◆◇»†‡]+\s*$/;
+const TALENTOSO = /⛤|⛥|☆|★|\btalentos[oa]\b|\(\s*T\s*\)/i;
+const esMayus = l => /[A-ZÁÉÍÓÚÑ]/.test(l) && l === l.toUpperCase();
+const VACIOS = /^(-|—|no|ninguno|ninguna|no tiene|n\/a|nada|aqu[ií]|pendiente)$/i;
+const HAB_ATR = {atletismo:"vigor",pelea:"vigor",esquiva:"destreza",latrocinio:"destreza",sigilo:"destreza",vuelo:"destreza",
+  coordinacion:"carisma",intimidacion:"carisma",oratoria:"carisma",seduccion:"carisma",subterfugio:"carisma",estilo:"voluntad",frialdad:"voluntad",
+  alerta:"percepcion",consciencia:"percepcion",empatia:"percepcion",iniciativa:"percepcion",investigacion:"percepcion",
+  adivinacion:"inteligencia",arcanismo:"inteligencia",callejeo:"inteligencia",cultura_magica:"inteligencia",cultura_muggle:"inteligencia",
+  herbologia:"inteligencia",magizoologia:"inteligencia",medicina:"inteligencia",politica:"inteligencia",supervivencia:"inteligencia",
+  duelo:"poder",pociones:"poder",rituales:"poder"};
+const COMBATE_KEYS = {iniciativa:"iniciativa",ataque_fisico:"ataque_fisico",ataque_magico:"ataque_magico",defensa:"defensa",pas:"pas",pa:"pas",
+  umbral_de_heridas:"umbral_de_heridas",umbral_heridas:"umbral_de_heridas",heridas:"heridas",lucha_fisica:"lucha_fisica",lucha_magica:"lucha_magica"};
+const NIVEL_POR_BONO = {0:"Desentrenado",1:"Novato",2:"Competente",4:"Experto",7:"Maestro",9:"Legendario"};
+const titulo = s => s.toLowerCase().replace(/(^|[\s(\/-])(\S)/g, (m, a, b) => a + b.toUpperCase());
+const LISTAS = ["quidditch","hechizos","pociones","rituales","objetos","armas","trasfondos","ventajas","talentos","idiomas","especializaciones","titulos","proezas","raza"];
+const CONOCIMIENTOS = ["hechizos","pociones","rituales","objetos","armas","quidditch"];
+
+// posts que son registros de canjes / actualizaciones / comentarios, no parte de la ficha
+const LOGRE = /^\W*(\d{1,2}\s+de\s+\w+,?\s+\d{4}\s*)?(ficha actualizada|ficha antigua|actualizaci[oó]n|actualizad[oa]s?|añadid[oa]s?|agregad[oa]s?|subid[oa]s?|subo\b|corregid[oa]s?|removid[oa]s?|me he metido|me agrego|espacio reservado|-*\s*post reservado|muchas gracias|cambiad[oa]s?|hola\b|@|regalos?\b|canjes?\s*:|¡?\s*canjes? aprobados|canje hecho|evoluci[oó]n de trasfondos|correcciones|he (actualizado|añadido|agregado|subido|canjeado|cambiado|corregido|quitado)|estoy de acuerdo|pues en esta|aqu[ií] (os|te|les) dejo|registro de canjes|.{1,40} escribi[oó]:)/i;
+const DATOS = {"nombre completo":"nombre","nombre y apellido":"nombre","nombre y apellidos":"nombre","avatar/pb":"avatar","avatar":"avatar","pb":"avatar",
+  "multicuenta":"multicuenta","multicuentas":"multicuenta","lugar de nacimiento":"lugar_nacimiento","lugar de residencia":"residencia",
+  "clase social":"clase_social","fecha de nacimiento":"fecha_nacimiento","edad":"edad","etapa":"etapa","orientacion sexual":"orientacion",
+  "tipo de sangre":"sangre","casa":"casa","curso":"curso","faccion":"faccion","equipo de quidditch":"quidditch","mascota":"mascota",
+  "punto fuerte":"punto_fuerte","punto debil":"punto_debil","gustos/aficiones":"gustos","fobias/manias":"fobias","empleo":"empleo"};
+const TEXTOS = {"descripcion fisica":"descripcion_fisica","descripcion psicologica":"descripcion_psicologica","historia":"historia","familia":"familia"};
+
+const SECCIONES = [
+  [/^atributos?\b/, "atributos"], [/^stats?\b/, "atributos"], [/^(bibl|infl|infor|inform|segu)\.?$/, "trasfondos"], [/^habilidades?\b/, "habilidades"],
+  [/^(acceso rapido|combate)\b/, "combate"],
+  [/^(perdida de )?puntos de (pociones|rituales|destino)/, "puntos"],
+  [/^hechizos?\b/, "hechizos"], [/^pociones\b/, "pociones"], [/^rituales\b/, "rituales"],
+  [/^objetos?\b/, "objetos"], [/^armas?\b/, "armas"], [/^quidditch$/, "quidditch"],
+  [/^(los )?trasfondos?\b/, "trasfondos"], [/^(bibliotecas?|informantes|influencias?|seguidores)$/, "trasfondos"],
+  [/^ventajas\b/, "ventajas"], [/^raza\b/, "raza"], [/^idiomas?\b/, "idiomas"], [/^especializacion(es)?\b/, "especializaciones"],
+  [/^talentos\b/, "talentos"], [/^titulos?\b/, "titulos"], [/^proezas\b/, "proezas"], [/^otros\b/, "otros"], [/^cronologia\b/, "cronologia"], [/^(misiones?|historial de misiones|registro de misiones)\b/, "cronologia"]
+];
+function cabecera(texto){
+  const cabeza = norm(texto).split(/[:|(]/)[0].trim();
+  for(const [re, sec] of SECCIONES) if(re.test(cabeza)) return {sec, cabeza};
+  return null;
+}
+// un encabezado sin ▋ tiene que parecer encabezado: corto y con dos puntos, en mayúsculas o de pocas palabras
+function cabeceraLinea(l, marcada){
+  const c = cabecera(l);
+  if(!c) return null;
+  if(marcada || c.sec === "puntos") return c;
+  if(c.sec === "otros" || l.length > 60) return null;
+  const head = l.split(/[:(|]/)[0].trim();
+  const despues = l.includes(":") ? l.slice(l.indexOf(":")+1).trim() : "";
+  if(despues && !/^[(→|]/.test(despues) && !/^(atributos|habilidades|combate|hechizos|pociones|rituales|objetos|armas|trasfondos|ventajas|raza|idiomas|especializaciones|talentos|titulos( academicos)?|proezas)$/.test(c.cabeza)) return null;
+  if(/:\s*$/.test(l) || esMayus(head) || (head.split(/\s+/).length <= 4 && !/[.,;]/.test(head))) return c;
+  return null;
+}
+function subcategoria(sec, cabeza){
+  if(/domestic/.test(cabeza)) return "domesticos";
+  if(/basic/.test(cabeza)) return "basicos";
+  if(/intermedi/.test(cabeza)) return "intermedios";
+  if(/avanzad/.test(cabeza)) return "avanzados";
+  if(/especial/.test(cabeza)) return "especiales";
+  if(/cumplea/.test(cabeza)) return "cumpleanos";
+  if(/legendari/.test(cabeza)) return "legendarios";
+  if(/reliqui/.test(cabeza)) return "reliquias";
+  if(sec === "talentos") return slug(cabeza.replace(/^talentos?\s*/, "")) || null;
+  if(sec === "idiomas") return /muggle/.test(cabeza) ? "muggle" : /magic/.test(cabeza) ? "magico" : null;
+  return null;
+}
+const esNombre = l => {
+  if(!esMayus(l) || /[:\d|—]/.test(l) || /AVADA KEDAVRA|^FICHA\b/.test(l)) return false;
+  const p = l.trim().split(/\s+/);
+  return p.length >= 2 && p.length <= 5 && p.every(w => /^[A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ'.-]+$/.test(w));
+};
+// posición de los primeros ":" que no estén dentro de paréntesis
+function dosPuntos(t){
+  let d = 0;
+  for(let i = 0; i < t.length; i++){
+    const c = t[i];
+    if(c === "(") d++; else if(c === ")") d = Math.max(0, d - 1); else if(c === ":" && d === 0) return i;
+  }
+  return -1;
+}
+function numeroFinal(v){
+  v = (v || "").trim();
+  if(/^-?\d+\s*(=|$)/.test(v)) return parseInt(v,10);
+  if(v.includes("=")){ const m = v.split("=").pop().match(/-?\d+/); if(m) return parseInt(m[0],10); }
+  const m = v.match(/-?\d+/); return m ? parseInt(m[0],10) : null;
+}
+function parseNivel(v, flexible){
+  v = sinPunto(v).replace(/^[\s.:;,\/|-]+/, "");
+  const m = flexible ? v.match(/^([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s*(?:\(\s*([+-]?\d+)\s*\))?/) : v.match(/^([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s*\(?\s*([+-]?\d+)?\s*\)?$/);
+  if(!m) return null;
+  const n = slug(m[1]);
+  const bono = m[2] !== undefined ? parseInt(m[2],10) : null;
+  if(!(n in NIVELES)){
+    // nivel mal escrito ("Competnte (+2)"): se toma el del bono
+    if(flexible && bono != null && NIVEL_POR_BONO[bono] && n.length > 3) return {nivel: NIVEL_POR_BONO[bono], bono, esperado: bono};
+    return null;
+  }
+  return {nivel: NIVEL_POR_BONO[NIVELES[n]], bono: bono ?? NIVELES[n], esperado: NIVELES[n]};
+}
+
+/* ---------- de HTML / BBCode a líneas de texto ---------- */
+const BLOQUES = new Set(["ADDRESS","ARTICLE","ASIDE","BLOCKQUOTE","CENTER","DD","DETAILS","DIV","DL","DT","FIELDSET","FIGURE","FOOTER","FORM","H1","H2","H3","H4","H5","H6","HEADER","HR","LI","MAIN","NAV","OL","P","PRE","SECTION","SUMMARY","TABLE","TBODY","TD","TH","THEAD","TR","UL","LABEL"]);
+const SALTAR = new Set(["BLOCKQUOTE","SCRIPT","STYLE","LINK","META","NOSCRIPT","INPUT","IMG","SVG","BUTTON","SELECT","TEXTAREA","HEAD","TITLE","IFRAME"]);
+const pareceHTML = t => /<\/?(div|span|br|p|details|summary|font|center|table|dl|dt|html|body|strong|label|a)\b[^>]*>/i.test(t);
+function htmlATexto(html){
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  let raices = [doc.body], autor = null;
+  const posts = [...doc.querySelectorAll(".postbody")];
+  if(posts.length){
+    const quien = p => (p.querySelector(".author strong, .author a")?.textContent || "").trim();
+    autor = quien(posts[0]) || null;
+    raices = posts.filter(p => !autor || quien(p) === autor).map(p => p.querySelector(".content") || p)
+      .filter((c, i) => {
+        if(i === 0) return true;
+        const txt = (c.textContent || "").trim();
+        const inicio = txt.slice(0, 200);
+        // posts de canjes, actualizaciones o reservados: no son parte de la ficha
+        if(LOGRE.test(inicio) || /^[A-ZÁÉÍÓÚÑ ]+:\s*\(?\d+\s*G\b/.test(inicio)) return false;
+        return /▋|→|\{|(atributos|habilidades|hechizos|pociones|rituales|objetos|trasfondos|talentos|idiomas|especializaciones|ventajas|proezas|t[ií]tulos|raza|combate)\s*:?/i.test(txt);
+      });
+  }
+  let out = "";
+  const walk = n => {
+    if(n.nodeType === 3){ out += n.nodeValue; return; }
+    if(n.nodeType !== 1 || SALTAR.has(n.tagName)) return;
+    if(n.tagName === "BR"){ out += "\n"; return; }
+    const bloque = BLOQUES.has(n.tagName);
+    if(bloque) out += "\n";
+    for(const c of n.childNodes) walk(c);
+    if((n.tagName === "SUMMARY" || n.tagName === "DT") && !/:\s*$/.test(out)) out += ":";
+    if(bloque) out += "\n";
+  };
+  raices.forEach(r => { walk(r); out += "\n"; });
+  return {texto: out, autor};
+}
+function limpiarBB(t){
+  return t
+    .replace(/\[img[^\]]*\][\s\S]*?\[\/img\]/gi, "")
+    .replace(/\[spoiler=([^\]]+)\]/gi, (m, x) => "\n" + x.trim().replace(/:?$/, ":") + "\n")
+    .replace(/\[\/spoiler\]/gi, "\n")
+    .replace(/\[\/?[a-z]+(?:=[^\]]*)?\]/gi, "")
+    .replace(/ /g, " ")
+    .replace(/[ \t]+(?=→)/g, "\n")
+    .replace(/\s+\/\s+(?=[\u2190-\u21FF\u2600-\u27BF•●])/g, "\n");
+}
+
+/* ---------- lectores de cada tipo de dato ---------- */
+// hechizo, poción, ritual u objeto: "Nombre | Latín. Requiere X. Arcano de Y. descripción" o "Nombre: descripción"
+function parseConocimiento(b){
+  b = sinPunto(b);
+  const o = {};
+  let resto = "";
+  const d = b.match(/^([^:]{1,70}?):\s*([\s\S]*)$/);
+  if(d && !/\.\s/.test(d[1])){ o.nombre = d[1].trim(); resto = d[2].trim(); }
+  else { const i = b.search(/\.\s/); o.nombre = i > 0 ? b.slice(0, i).trim() : b; resto = i > 0 ? b.slice(i+1).trim() : ""; }
+  if(o.nombre.includes("|")){ const [a, l] = o.nombre.split("|"); o.nombre = a.trim(); o.latin = l.trim(); }
+  const rq = resto.match(/\bRequiere\s+([^.)]+)/);
+  if(rq) o.requiere = sinPunto(rq[1]);
+  const tipos = [...resto.matchAll(/Arcano de ([A-Za-zÁÉÍÓÚáéíóúñÑ]+)/gi)].map(m => cap(m[1]));
+  if(/\bContrahechizo\b/i.test(resto)) tipos.push("Contrahechizo");
+  if(tipos.length) o.tipo = [...new Set(tipos)];
+  const desc = resto.replace(/\(?\bRequiere\s+[^.)]+[.)]?\s*/, "").replace(/Arcano de [A-Za-zÁÉÍÓÚáéíóúñÑ]+\.?\s*/gi, "").replace(/^[\s.]+/, "").trim();
+  if(desc) o.descripcion = desc;
+  return o;
+}
+function parseTalento(b){
+  b = sinPunto(b);
+  const x = b.match(/^(.+?)\s*\(\s*x\s*(\d+)\s*\)$/i);
+  if(x) return {nombre: x[1].trim(), cantidad: parseInt(x[2],10)};
+  const par = b.match(/^([^:(]{1,50}?)\s*\(([^)]{1,40})\)\s*:?\s*([\s\S]*)$/);
+  if(par && !/^\s*(requiere|x\s*\d)/i.test(par[2])){
+    const o = {nombre: par[1].trim(), detalle: par[2].trim()};
+    if(par[3].trim()) o.descripcion = par[3].trim();
+    return o;
+  }
+  const i = b.indexOf(":"), p = b.indexOf("(");
+  let nombre, resto;
+  if(i > 0 && i <= 50 && (p < 0 || i < p)){ nombre = b.slice(0,i).trim(); resto = b.slice(i+1).trim(); }
+  else if(p > 0 && p <= 50){ nombre = b.slice(0,p).trim(); resto = b.slice(p).trim(); }
+  else return {nombre: b};
+  const o = {nombre};
+  if(nombre.includes("|")){ const [a, d] = nombre.split("|"); o.nombre = a.trim(); o.detalle = d.trim(); }
+  const rq = resto.match(/^\(\s*requiere\s+([^)]*)\)\.?\s*/i) || resto.match(/^requiere\s+([^.]+)\.\s*/i);
+  if(rq){ o.requiere = sinPunto(rq[1]); resto = resto.slice(rq[0].length).trim(); }
+  const primera = resto.split(/\s+—\s+|\.\s+|;\s+/)[0];
+  if(!o.detalle && primera && primera.length <= 30){ o.detalle = sinPunto(primera); resto = resto.slice(primera.length).replace(/^\s*(—|\.|;)\s*/, "").trim(); }
+  if(resto) o.descripcion = resto;
+  return o;
+}
+const pareceCategoria = s => {
+  const p = s.trim().split(/\s+/);
+  return p.length <= 9 && p.filter(w => w.length > 3).every(w => /^[A-ZÁÉÍÓÚÑ>\/(&]/.test(w));
+};
+const CAT_TRASFONDO = /^(hogwarts|academic|politic|sociedad|bajos fondos|seres magicos|arcan|callejeo|cultura|medicina|herbolog|magizoolog|supervivencia|adivinac|ministerio|deporte|prensa|gringotts|san mungo|criminal|contraband|localizac|ley)/;
+function parseTrasfondo(b, grupo, pj){
+  b = b.trim().replace(/(\s[IVX]{1,4})\.(?=[A-ZÁÉÍÓÚ])/g, "$1. ");
+  b = b.replace(/\)(?=[A-ZÁÉÍÓÚÑ][a-záéíóúñ])/, "). ").replace(/(\s[IVX]{1,4})-\s/, "$1: ");   // "Arcanismo II- La biblioteca…"                      // "(+3 usos)Lyall comenzó…"
+  // "INFLUENCIA POLÍTICA IIINo lidera…" → nivel pegado al texto
+  b = b.replace(/^((?:[A-ZÁÉÍÓÚÑ>—\/&-]+\s+){1,6}[IVX]{1,4})(?=[A-ZÁÉÍÓÚÑ][a-záéíóúñ])/, "$1. ");
+  const m = b.match(/^(Bibliotecas?|Influencias?|Inform\w*|Seguidores)\b\s*[—:-]?\s*([\s\S]*)$/i);
+  if(!m) return {general: grupo || null, texto: sinPunto(b)};
+  // grupo de un encabezado ("Biblioteca Política:", "BIBLIOTECAS (9):", "† Biblioteca †:") → solo la categoría
+  const grupoTipo = grupo && (grupo.match(/^(bibl|infl|inform|segu)/i) || [])[1];
+  if(grupoTipo && grupoTipo.toLowerCase().slice(0,4) !== m[1].toLowerCase().slice(0,4)) grupo = null;   // encabezado de otro tipo
+  if(grupo) grupo = grupo.replace(/^(bibliotecas?|influencias?|inform\w*|seguidores)\b/i, "").replace(/\(\s*\d+\s*\)/g, "").replace(/[^\p{L}\s>\/&-]/gu, "").trim() || null;
+  // encabezado que no es una categoría ("VENUS:", "Elerias IA - Transfondos:") = Identidad Alternativa
+  let alias = null;
+  if(grupo && !grupoTipo && !CAT_TRASFONDO.test(norm(grupo))){
+    const n = grupo.replace(/\b(IA|identidad alternativa)\b/gi, "").replace(/[-–—]?\s*tr?a?n?sfondos?\b.*$/i, "").trim();
+    const propio = pj && n && norm(pj).split(" ").includes(norm(n).split(" ")[0]);
+    if(n && n.split(/\s+/).length <= 4 && !propio) alias = esMayus(n) ? titulo(n) : n;
+    grupo = null;
+  }
+  const tipo = /^bibl/i.test(m[1]) ? "Biblioteca" : /^infl/i.test(m[1]) ? "Influencia" : /^inform/i.test(m[1]) ? "Informantes" : "Seguidores";
+  const o = {tipo, nivel: null};
+  let resto = m[2], identidad = null;
+  // cabeza: hasta los primeros dos puntos o el primer punto seguido
+  const corte = [resto.indexOf(":"), resto.search(/\.\s/), resto.search(/\s[-–]\s/), resto.search(/\s?-{2,}/), resto.indexOf("→")].filter(x => x >= 0);
+  const ci = corte.length ? Math.min(...corte) : -1;
+  let pre = ci >= 0 ? resto.slice(0, ci) : resto;
+  let post = ci >= 0 ? resto.slice(ci).replace(/^[\s:.\-–→>]+/, "").trim() : "";
+  const dpar = pre.match(/\(\s*([1-8])\s*\)/);
+  if(dpar){ o.nivel = parseInt(dpar[1],10); pre = pre.replace(dpar[0], " "); }   // "Biblioteca Medicina (1)"
+  const idm = pre.match(/\(([^)]+)\)/);
+  if(idm){ if(!/^\+|\busos?\b/i.test(idm[1])) identidad = idm[1].trim(); pre = pre.replace(idm[0], " "); }
+  pre = pre.replace(/\bde\s+\d+\s+a\s+(?=[IVX]{1,4}\b)/i, "");          // "Localizaciones de 0 a II"
+  const romanos = [...pre.matchAll(/(?:^|[\s—>-])([IVX]{1,4})(?=[\s.—>:-]|$)/g)];
+  if(romanos.length){
+    o.nivel = ROMANOS[romanos[romanos.length - 1][1]] ?? null;
+    pre = pre.replace(/(^|[\s—>-])[IVX]{1,4}(?=[\s.—>:-]|$)/g, "$1");
+  }
+  if(o.nivel == null){ const dm = pre.match(/(?:^|\s)([1-8])\s*$/); if(dm){ o.nivel = parseInt(dm[1],10); pre = pre.slice(0, dm.index); } }   // "Biblioteca Herbología 2:"
+  pre = pre.replace(/^[\s—:>.-]+|[\s—:>.-]+$/g, "").trim();
+  if(!pre && !grupo && identidad && identidad.split(/\s+/).length <= 4){ pre = identidad; identidad = null; }   // "Influencia (Bajos Fondos) 1:"
+  // la línea trae su propia categoría: el encabezado solo manda si es una categoría de trasfondo ("Hogwarts:", "Académicos:")
+
+  let soloTexto = false;
+  if(o.nivel == null){ const pm = post.match(/^([IVX]{1,4}|[1-8])(?:\s*-\s*([IVX]{1,4}))?\b\.?\s*(:?)\s*([\s\S]*)$/); if(pm){ o.nivel = ROMANOS[pm[2] || pm[1]] ?? parseInt(pm[1],10); soloTexto = !!pm[3]; post = pm[4].trim(); } }
+  if(grupoTipo && pre) grupo = null;   // "Influencia Política:" + "Influencia Política I" → manda la línea
+  let categoria = pre || null, descripcion = "";
+  if(post){
+    if(categoria){
+      // "Cultura Muggle II: Arte Muggle (Musica)" → la parte de después es la específica
+      const p2 = sinPunto(post);
+      if(!soloTexto && !/[.,;:]/.test(p2) && p2.length <= 60 && pareceCategoria(p2)) categoria += " > " + p2;
+      else descripcion = post;
+    } else {
+      const c = post.match(/^([^.,:]{1,70}?)\s*(?:\(([^)]+)\))?\s*\.\s*([\s\S]*)$/);
+      // "Biblioteca III: Arcanismo", "Biblioteca I: Cultura Mágica: texto", "Influencia V: Política→MACUSA: texto", "Biblioteca I - Cultura muggle - Arte muggle: texto"
+      const k = post.match(/^([^.:,→]{1,45}?)(?:\s*→\s*([^.:]{1,45}?))?\s*(?:\(([^)]{1,40})\))?\s*(?::|\.(?:\s|$)|\s-{2,}|$)\s*([\s\S]*)$/);
+      if(c && c[1].trim() && pareceCategoria(c[1])){ categoria = c[1].trim(); identidad = identidad || c[2] || null; descripcion = c[3]; }
+      else if(k && /^\p{Lu}/u.test(k[1].trim()) && k[1].trim().split(/\s*(?:—|>|\s-\s|\s\/\s)\s*/).every(w => w.split(/\s+/).length <= 3 || pareceCategoria(w))){
+        categoria = k[1].trim() + (k[2] ? " > " + k[2].trim() : "");
+        if(k[3] && !/^\+|\busos?\b|pendiente/i.test(k[3])) identidad = identidad || k[3];
+        descripcion = k[4] || "";
+        if(grupo && !grupoTipo && norm(grupo) !== norm(categoria.split(/\s*(?:—|>|\s-\s|\s\/\s)\s*/)[0])) categoria = grupo + " > " + categoria;
+      }
+      else descripcion = post;
+    }
+  }
+  if(grupoTipo && categoria) grupo = null;
+  const partes = categoria ? categoria.split(/\s*(?:—|>|\s-\s|\s\/\s)\s*/).map(s => s.trim()).filter(Boolean) : [];
+  if(tipo === "Biblioteca" || partes.length > 1 || !grupo){ o.general = partes[0] || grupo || null; if(partes.length > 1) o.especifica = partes.slice(1).join(" > "); }
+  else { o.general = grupo; if(partes[0] && norm(partes[0]).slice(0,6) !== norm(grupo).slice(0,6)) o.especifica = partes[0]; }
+  if(o.general && / > /.test(o.general)){ const g = o.general.split(" > "); o.general = g[0]; o.especifica = g.slice(1).concat(o.especifica ? [o.especifica] : []).join(" > "); }
+  const lindo = s => s && esMayus(s) && s.length > 3 ? titulo(s) : s;
+  if(o.general) o.general = lindo(o.general);
+  if(o.especifica) o.especifica = o.especifica.split(" > ").map(lindo).join(" > ");
+  if(!identidad && alias && tipo !== "Biblioteca") identidad = alias;   // las bibliotecas se comparten con la identidad alternativa
+  if(identidad) o.identidad = identidad.trim();
+  descripcion = descripcion.replace(/^[\s:.\-–—]+/, "").trim();
+  if(descripcion) o.descripcion = descripcion;
+  return o;
+}
+function parseVentaja(b){
+  b = b.trim();
+  const m = b.match(/^(Fama|Orden de Merl[ií]n|Patr[oó]n|Recursos)[\s,]+([IVX]{1,4}|\d+ª?\s*Clase|\d+)\b\.?\s*:?\s*([\s\S]*)$/i) || b.match(/^(Fama|Orden de Merl[ií]n|Patr[oó]n|Recursos)[\s,]+([^:]+?)\s*(?::\s*([\s\S]*))?$/i);
+  if(!m){ const i = b.indexOf(":"); return {nombre: sinPunto(i > 0 ? b.slice(0,i) : b)}; }
+  const niv = sinPunto(m[2]);
+  const o = {nombre: m[1], nivel: ROMANOS[niv.toUpperCase()] ?? niv};
+  if(m[3] && m[3].trim()) o.descripcion = m[3].trim();
+  return o;
+}
+function parseIdioma(b, tipo){
+  b = sinPunto(b);
+  const im = b.match(/^Idioma\s+(Muggle|M[aá]gico)\s*\(([^)]+)\)\s*([^:]+?)\s*(?::\s*([\s\S]*))?$/i);
+  if(im){ const o = {idioma: im[3].trim(), nivel: im[2].trim().toLowerCase(), tipo: /^mu/i.test(im[1]) ? "muggle" : "magico"}; if(im[4]) o.descripcion = im[4].trim(); return o; }
+  const i = b.indexOf(":"), g = b.indexOf("—");
+  let idioma, resto = "";
+  const c = b.indexOf(",");
+  if(i > 0 && i <= 40 && (g < 0 || i < g)){ idioma = b.slice(0,i); resto = b.slice(i+1); }
+  else if(g > 0){ idioma = b.slice(0,g); resto = b.slice(g+1); }
+  else if(c > 0 && c <= 30){ idioma = b.slice(0,c); resto = b.slice(c+1); }
+  else idioma = b;
+  const o = {idioma: idioma.trim()};
+  if(tipo) o.tipo = tipo;
+  resto = resto.trim();
+  if(resto){
+    const n = resto.match(/^(?:nivel\s+)?(nativo|natal|alto|medio|bajo|b[aá]sico|avanzado|intermedio|fluido)\b\.?\s*([\s\S]*)$/i) || resto.match(/^(?:nivel\s+)?([^.]+?)(?:\.\s*([\s\S]*))?$/i);
+    if(n){ o.nivel = n[1].trim().toLowerCase(); if(n[2]) o.descripcion = n[2].trim(); }
+  }
+  return o;
+}
+const CALIF = /(Extraordinari[oa]s?|Supera (?:las? )?E[sx]pectativas|Aceptable|Insatisfactorio|Desastroso|Troll)/i;
+function parseTitulo(b){
+  b = sinPunto(b);
+  const bonito = s => esMayus(s) && s.length > 4 ? cap(s) : s;
+  const i = b.indexOf(":"), g0 = b.indexOf("—"), g1 = b.search(/\s[-–]\s/), g = g0 >= 0 ? g0 : g1;
+  let izq = b, der = "";
+  if(i > 0 && (g < 0 || i < g)){ izq = b.slice(0,i); der = b.slice(i+1).trim(); }
+  else if(g > 0){ izq = b.slice(0,g); der = b.slice(g).replace(/^\s*[—–-]\s*/, "").trim(); }
+  izq = izq.trim();
+  if(/^tu (pj|personaje)\b/i.test(der) && !CALIF.test(der)) der = "";   // "TIMO: Tu PJ ha aprobado los TIMOs, con la siguiente calificación:"
+  const o = {};
+  const ex = izq.match(/^(TIMO'?s?|É?EXTASIS|ÉXTASIS|EXTASIS)\b[\s:]*(.*)$/i);
+  if(ex){ o.examen = ex[1]; if(ex[2].trim()) o.materia = ex[2].trim(); } else o.materia = izq;
+  const cm = der.match(CALIF);
+  if(cm){
+    const antes = sinPunto(der.slice(0, cm.index).trim());
+    if(antes && !o.materia) o.materia = antes;
+    o.calificacion = bonito(cm[0]);
+    const despues = der.slice(cm.index + cm[0].length).replace(/^[\s.]+/, "").trim();
+    if(despues) o.descripcion = despues;
+  } else if(der) o.calificacion = bonito(sinPunto(der.split(/\.\s/)[0]));
+  return o;
+}
+const ESP_FEM = {hechicera:"hechicero", maga_oscura:"mago_oscuro", encantadora:"encantador", medimaga:"medimago", magizoologa:"magizoologo", jugadora_de_quidditch:"jugador_de_quidditch"};
+function parseEspecializacion(b){
+  const i = b.indexOf(":");
+  const cabeza = sinPunto(i > 0 ? b.slice(0,i) : b);
+  const m = cabeza.match(/^(.+?)\s+(\d+|[IVX]{1,4})$/);
+  if(!m) return {clave: slug(cabeza), nivel: 1};
+  const k = slug(m[1]);
+  return {clave: ESP_FEM[k] || k, nivel: /^\d+$/.test(m[2]) ? parseInt(m[2],10) : ROMANOS[m[2]]};
+}
+
+/* ---------- parser principal ---------- */
+function nuevaFicha(nombre){
+  return {personaje: nombre || "", datos: {}, raza: null, limites: null, atributos: {}, talentosos: [], habilidades: {}, bonos: {},
+    combate: {}, combate_formas: {}, puntos: {}, especializaciones: {}, hechizos: {}, pociones: {}, rituales: {}, objetos: {}, armas: [], quidditch: {},
+    talentos: {}, trasfondos: [], ventajas: [], idiomas: [], titulos: [], proezas: [], textos: {}, _avisos: [], _esperados: {}};
+}
+
+function parsear(entrada){
+  let texto = entrada, autor = null;
+  if(pareceHTML(entrada) && typeof DOMParser !== "undefined"){ const r = htmlATexto(entrada); texto = r.texto; autor = r.autor; }
+  const lineas = limpiarBB(texto).split("\n");
+  const fichas = [];
+  let f = null, sec = null, sub = null, grupo = null, arte = false, armaSub = null, ultimo = null, textoKey = null, ignorar = false, forma = null;
+  const asegurar = () => { if(!f){ f = nuevaFicha(""); fichas.push(f); } };
+  const lista = (obj, k) => (obj[k] ||= []);
+  const empujar = (arr, o) => { arr.push(o); ultimo = o; return o; };
+  const anexar = t => { if(!ultimo) return false; ultimo.descripcion = ultimo.descripcion ? ultimo.descripcion + "\n" + t : t; return true; };
+  const cambiarSeccion = (s, sb) => { sec = s; sub = sb; grupo = null; arte = false; armaSub = null; ultimo = null; textoKey = null; forma = null; };
+  const esperado = (l, s, sb) => { const e = l.match(/[|(]\s*(\d+)\s*\)?\s*:?\s*$/); if(e && sb && f) f._esperados[s + "." + sb] = parseInt(e[1],10); };
+
+  for(const raw of lineas){
+    let l = raw.replace(/[ \t]+/g, " ").trim();
+    if(!l) continue;
+    const marcada = /^[▋{]/.test(l);
+    l = l.replace(/^[▋{]\s*/, "").replace(/»\s*$/, "").trim();
+    if(!l || /^(?:\S\s+){3,}\S$/.test(l) && l.split(/\s+/).every(w => w.length <= 1)) continue;  // "H A N A ‧ P A R K"
+    // registro de canjes al final del tema ("Ficha actualizada...", "CANJES:", "1.000 grageas --- ..."): no es parte de la ficha
+    if(/^[-–—\s]*(ficha actualizada|canjes:?$|canjes añadidos|canjes iniciales|recompensas añadidas|regalo de cumpleaños añadido|-?post reservado|espacio reservado)/i.test(l) || /^(subid[oa]s?|añadid[oa]s?|agregad[oa]s?|he (agregado|añadido|subido))\b.*canje/i.test(l) || /^[A-ZÁÉÍÓÚÑ ]+:?\s*[\d.,]+\s*gra[gj]eas\.?:?$/.test(l) || /^.{1,40}\sescribi[oó]:\s*$/i.test(l)){ ignorar = true; textoKey = null; continue; }
+    if(ignorar && !esNombre(l) && !(!BULLET.test(l) && cabeceraLinea(l, marcada))){
+      // "☩ TRASFONDOS:" (encabezado con viñeta) también corta el registro de canjes
+      const sinV = l.replace(BULLET, "").replace(SIMBOLOS_FIN, "").trim();
+      if(!(BULLET.test(l) && /^[^:]{2,40}:?$/.test(sinV) && cabeceraLinea(sinV, true))) continue;
+    }
+    ignorar = false;
+    // dentro de trasfondos, "Plantas Naturales I:" / "Pociones II:" son específicas sueltas (no cambian de sección)
+    if(sec === "trasfondos"){
+      const c0 = l.replace(/^[▋{]\s*/, "").replace(BULLET, "").trim();
+      const esTipo = /^(Bibliotecas?|Influencias?|Inform\w*|Seguidores|Fama|Orden|Patr\w*|Recursos)\b/i;
+      // "✵ Herbología: I-III", "✵ Herbología: > Pociones: I-II", "✵ Académicos: > Biólogos" → categoría para lo que sigue
+      const hm = c0.match(/^([^:>]{2,40}?)\s*:?\s*(?:>\s*([^:]{2,50}?))?\s*:?\s*(?:([IVX]{1,4})\s*-\s*([IVX]{1,4}))?\s*$/);
+      if(hm && !esTipo.test(c0) && CAT_TRASFONDO.test(norm(hm[1]))){ grupo = hm[1].trim() + (hm[2] ? " > " + hm[2].trim() : ""); ultimo = null; continue; }
+      // "Biblioteca:" / "informantes:" debajo de esa categoría: no la pisa
+      if(/^(bibliotecas?|influencias?|inform\w*|seguidores)\s*:?\s*$/i.test(c0) && grupo && CAT_TRASFONDO.test(norm(grupo))){ ultimo = null; continue; }
+      if(!/^(Bibliotecas?|Influencias?|Inform\w*|Seguidores|Fama|Orden|Patr\w*|Recursos)\b/i.test(c0) && /^[^:]{2,40}?\s[IVX]{1,4}\s*:?\s*$/.test(c0)){ ultimo = null; continue; }
+    }
+    if(/^(?:[•●→-]\s*)?[\d.,]+\s*gra[gj]eas\s*-{2,}/i.test(l) || /^ficha diseñada/i.test(l)) continue;
+    { const g = l.search(/\d[\d.,]*\s*gra[gj]eas/i);
+      if(g >= 0 && (g < 60 || l.length < 90 || /(--|=|->)\s*[\d.,]+\s*gra[gj]eas/i.test(l))) continue; }
+    // "3Vigor4Destreza3Carisma..." (celdas pegadas) → una línea por atributo
+    if(/^(\d+[A-ZÁÉÍÓÚ][a-záéíóúñ]+){5,}$/.test(l)){
+      asegurar();
+      for(const m of l.matchAll(/(\d+)([A-ZÁÉÍÓÚ][a-záéíóúñ]+)/g)){ const k = slug(m[2]); if(ATRIBUTOS.includes(k)) f.atributos[k] = parseInt(m[1],10); }
+      continue;
+    }
+    // "7IniciativaModificador de…7Ataque Físico…", "16Puntos de PocionesPoder (5)…" (tarjetas pegadas)
+    if(/^\d+(Iniciativa|Ataque|Defensa|Lucha|Umbral|Heridas|Puntos de)/.test(l)){
+      asegurar();
+      l = l.replace(/\/\s*(\d)(?=\d+[A-ZÁÉÍÓÚ])/g, "/ $1 ");     // "… / 38Lucha Mágica" = "/ 3" + "8"
+      for(const m of l.matchAll(/(?:^|\D)(\d+)(Iniciativa|Ataque F[ií]sico|Ataque M[aá]gico|Defensa|Lucha F[ií]sica|Lucha M[aá]gica|Umbral de Heridas|Heridas|Puntos de (?:Pociones|Rituales|Destino))(?![a-záéíóúñ])/g)){
+        const k = slug(m[2]), v = parseInt(m[1],10), pm = k.match(/^puntos_de_(\w+)$/);
+        if(pm) f.puntos[pm[1]] = v; else if(COMBATE_KEYS[k]) f.combate[COMBATE_KEYS[k]] = v;
+      }
+      continue;
+    }
+    if(/^\d+\s*PVs?$/i.test(l)){ asegurar(); f.combate.pas = parseInt(l,10); continue; }
+    // "AtletismoExperto+4" (celdas pegadas)
+    const pegada = l.match(/^([A-ZÁÉÍÓÚ][A-Za-zÁÉÍÓÚáéíóúñ ()\/]*?[a-záéíóúñ)])(Desentrenad[oa]|Novat[oa]|Competente|Expert[oa]|Maestr[oa]|Legendari[oa])\s*\(?([+-]\d+)?\)?$/);
+    if(pegada && !l.includes(":")) l = "→ " + pegada[1] + ": " + pegada[2] + (pegada[3] ? " (" + pegada[3] + ")" : "");
+    let bullet = BULLET.test(l);
+    // encabezado con viñeta: "✧ Habilidades:", "❅ Trasfondos ❅", "❅ ATRIBUTOS: Tres al 4"
+    if(bullet){
+      const sinV = l.replace(BULLET, "").replace(SIMBOLOS_FIN, "").trim();
+      const cb = cabecera(sinV), cbz = sinV.split(/[:(]/)[0].trim();
+      const despuesV = sinV.includes(":") ? sinV.slice(sinV.indexOf(":")+1).trim() : "";
+      if(cb && sinV.length <= 60 && /^(atributos?|stats?|habilidades|hechizos|pociones|rituales|objetos(\/armas)?|armas|trasfondos|ventajas|raza|idiomas|especializaciones|talentos|titulos( academicos)?|proezas)$/.test(norm(cbz)) && (!despuesV || cb.sec === "atributos" || /^\(/.test(despuesV))){
+        l = sinV; bullet = false;
+      }
+    } else l = l.replace(SIMBOLOS_FIN, "").trim() || l;
+    const cuerpo0 = l.replace(BULLET, "").trim();
+    const dosp = cuerpo0.indexOf(":");
+    const clave0 = dosp > 0 ? cuerpo0.slice(0, dosp).trim() : cuerpo0;
+    const valor0 = dosp > 0 ? cuerpo0.slice(dosp+1).trim() : "";
+    const claveN = norm(clave0).replace(/\s*\/\s*/g, "/");
+
+    // datos personales y textos largos (descripciones, historia, familia)
+    if(dosp > 0 && dosp <= 40 && (claveN in DATOS || claveN in TEXTOS)){
+      asegurar();
+      if(claveN in DATOS){
+        const v = sinPunto(valor0);
+        if(v && !VACIOS.test(v)) f.datos[DATOS[claveN]] = v;
+        if(DATOS[claveN] === "nombre" && v && !f.personaje) f.personaje = v;
+        textoKey = null;
+      } else { textoKey = TEXTOS[claveN]; f.textos[textoKey] = valor0; }
+      continue;
+    }
+
+    if(!bullet && sec === "talentos" && /^(talentos\s+)?(de\s+)?(combate|generales|m[aá]gicos|arcanos|sociales|relaciones|otros)\s*:?$/i.test(l)){
+      sub = slug(l.replace(/:\s*$/, "").replace(/^talentos\s+/i, "")); ultimo = null; continue;
+    }
+    const cab = bullet ? null : cabeceraLinea(l, marcada || /^(atributos?|stats?|habilidades|trasfondos|talentos|ventajas|idiomas|especializaciones|proezas)\b/i.test(l) && l.length <= 60);
+    if(textoKey && !cab){ f.textos[textoKey] += (f.textos[textoKey] ? "\n" : "") + l; continue; }
+
+    // nombre del personaje: "IRVIN GILES"
+    if(!bullet && !marcada && !cab && esNombre(l) && (sec === null || sec === "habilidades")){
+      if(!f || Object.keys(f.atributos).length || Object.keys(f.bonos).length){ f = nuevaFicha(""); fichas.push(f); }
+      f.personaje = l.split(/\s+/).map(cap).join(" ");
+      cambiarSeccion(null, null);
+      continue;
+    }
+
+    // subcategoría suelta: "BÁSICOS", "INTERMEDIAS:", "ESPECIALES"
+    if(!bullet && !cab && ["hechizos","pociones","rituales","objetos","idiomas","quidditch"].includes(sec)){
+      const t = norm(l).replace(/[:\s]+$/, "");
+      if(/^(domestic|basic|intermedi|avanzad|especial|cumplea|legendari|reliqui|muggle|magic)\w*"?\s*([|(]\s*\d+\s*\)?)?$/.test(t)){
+        sub = subcategoria(sec, t); ultimo = null; esperado(l, sec, sub);
+        continue;
+      }
+    }
+
+    asegurar();
+    // "VIGOR: +2" o "Pociones: Competente (+2)" sin viñeta: es un dato, no un encabezado
+    const esValor = dosp > 0 && dosp <= 45 && valor0 && (parseNivel(valor0) || /^[+-]?\d+\.?$/.test(valor0));
+    if(!bullet){
+      const head = l.replace(/\(\s*T\s*\)/i, "").replace(/\{[^}]*\}/g, "").split(/[:(]/)[0].trim();
+      if(cab?.sec !== "puntos" && esValor){
+        if(!sec && ATRIBUTOS.includes(slug(head))) sec = "atributos";
+        bullet = true;
+      } else if(!valor0 && ATRIBUTOS.includes(slug(head)) && (!sec || sec === "habilidades" || sec === "atributos") && (esMayus(head) || sec === "habilidades" || (sec === "atributos" && Object.keys(f.atributos).length >= 7))){
+        // grupo de habilidades: "VIGOR (T):"
+        if(sec !== "habilidades") cambiarSeccion("habilidades", null);
+        grupo = slug(head); arte = false;
+        if(TALENTOSO.test(l) && !f.talentosos.includes(grupo)) f.talentosos.push(grupo);
+        continue;
+      } else if(cab){
+        const despues = l.includes(":") ? l.slice(l.indexOf(":")+1).trim() : "";
+        if(cab.sec === "puntos"){
+          const clave = /perdida/.test(cab.cabeza) ? "perdida_destino" : cab.cabeza.match(/puntos de (\w+)/)[1];
+          f.puntos[clave] = numeroFinal(despues);
+          continue;
+        }
+        if(cab.sec === "raza" && despues && !BULLET.test(despues)){ cambiarSeccion("raza", null); f.raza = {nombre: sinPunto(despues)}; continue; }
+        const sbNueva = subcategoria(cab.sec, cab.cabeza);
+        if(cab.sec === sec && !sbNueva && CONOCIMIENTOS.includes(sec)){ ultimo = null; continue; }   // "Rituales inventados:" dentro de RITUALES
+        cambiarSeccion(cab.sec, sbNueva);
+        esperado(l, sec, sub);
+        if(sec === "atributos"){ const lim = l.match(/L[ií]mites?(?:\s+actuales)?\s*:\s*([^)]*)/i) || l.match(/^(?:atributos?|stats?)\s*:\s*(.+)$/i); if(lim && !/^_*$/.test(lim[1].trim())) f.limites = sinPunto(lim[1].replace(/\)\s*$/, "").trim()); }
+        if(despues && BULLET.test(despues)){ l = despues; bullet = true; }  // "▋ RAZA: → Metamorfomago: ..."
+        else continue;
+      } else if(sec === "combate" && !valor0 && esMayus(l) && l.length <= 40){
+        forma = slug(l); continue;   // "HUMANO:", "LICÁNTROPO:"
+      } else if(!valor0 && esMayus(l) && /:\s*$/.test(l) && l.length <= 40 && ["talentos","trasfondos","proezas","objetos","quidditch"].includes(sec)){
+        // subgrupo sin viñeta: "TALENTOS GENERALES:", "BAJOS FONDOS:", "RELIQUIAS:"
+        const t = sinPunto(l.replace(/:\s*$/, ""));
+        if(sec === "talentos") sub = slug(t.replace(/^talentos?\s+/i, ""));
+        else if(sec === "proezas") grupo = slug(t);
+        else if(sec === "trasfondos") grupo = titulo(t);
+        else sub = subcategoria(sec, norm(t)) || slug(t);
+        ultimo = null; esperado(l, sec, sub);
+        continue;
+      } else if(CONOCIMIENTOS.includes(sec) && /:\s*$/.test(l) && l.indexOf(":") === l.length - 1 && l.length <= 40 && l.split(/\s+/).length <= 4){
+        const t = norm(l).replace(/[:"\s]+$/, "").replace(/\s*\(\d+\)$/, "");
+        sub = subcategoria(sec, t) || slug(t); ultimo = null; esperado(l, sec, sub);
+        continue;
+      } else if(LISTAS.includes(sec)){
+        const empiezaTrasfondo = (sec === "trasfondos" && /^(bibliotecas?|influencias?|inform\w*|seguidores)\b/i.test(l) && /(^|[\s—>:(-])([IVX]{1,4}|[1-8])(?=[\s.—>:,)-]|$)/.test(l.slice(0, 120))) ||
+          (/^(Bibliotecas?|Influencias?|Inform(?:antes|ates)|Seguidores)\b/i.test(l) && /(^|[\s—>:(-])([IVX]{1,4}|[1-8])(?=[\s.—>:,)-]|$)/.test(l.slice(0, 120)));
+        if(empiezaTrasfondo || sec === "titulos") bullet = true;
+        else if(/^[—–-]/.test(l) && ultimo){ anexar(l); continue; }
+        else if(l.split(/\s+/).length < 3 && dosp < 0 && !["talentos","especializaciones","ventajas","raza"].includes(sec)) continue;  // etiquetas sueltas ("Otros")
+        else if(sec === "idiomas" && dosp < 0 && !l.includes("—")){ if(ultimo) anexar(l); continue; }
+        else if(dosp > 0 && dosp <= 45 && valor0) bullet = true;
+        else if(ultimo && (l.length > 80 || dosp === l.length - 1 || !["talentos","especializaciones","idiomas","ventajas","raza"].includes(sec))){ anexar(l); continue; }
+        else if(l.length <= 80) bullet = true;
+        else continue;
+      } else continue;
+    }
+
+    let cuerpo = l.replace(BULLET, "").trim();
+    if(!cuerpo || VACIOS.test(sinPunto(cuerpo))) continue;
+    const esTrasfondo = /^(Bibliotecas?|Influencias?|Inform(?:antes|ates)|Seguidores)\b(?![^:]{0,3}$)/i.test(cuerpo) &&
+      /(^|[\s—>:(-])([IVX]{1,4}|[1-8])(?=[\s.—>:,)-]|$)/.test(cuerpo.slice(0, 120)) && !["hechizos","pociones","rituales","objetos","talentos"].includes(sec);
+    if(esTrasfondo && sec !== "trasfondos"){ cambiarSeccion("trasfondos", null); }
+    // subgrupo con viñeta: "• Bibliotecas:", "• Talentos Generales:", "• Carisma:", "• COMBATE"
+    const finDosPuntos = /:\s*$/.test(cuerpo) && cuerpo.length < 45 && !CONOCIMIENTOS.includes(sec) && !esTrasfondo && !["ventajas","especializaciones"].includes(sec) &&
+      (sec !== "talentos" || /^talentos?\b/i.test(cuerpo) || esMayus(cuerpo)) && (sec !== "proezas" || ATRIBUTOS.includes(slug(cuerpo.replace(/:\s*$/, ""))));
+    if(finDosPuntos || (esMayus(cuerpo) && cuerpo.length < 30 && !cuerpo.includes(":") && !esTrasfondo && ["talentos","proezas","trasfondos"].includes(sec))){
+      const t = sinPunto(cuerpo.replace(/:\s*$/, ""));
+      if(sec === "habilidades"){
+        if(/arte|artesan/i.test(t)) arte = true;
+        else if(ATRIBUTOS.includes(slug(t))){ grupo = slug(t); arte = false; }
+        continue;
+      }
+      if(sec === "talentos"){ sub = slug(t.replace(/^talentos?\s+/i, "")); ultimo = null; continue; }
+      if(sec === "proezas"){ grupo = slug(t); ultimo = null; continue; }
+      if(sec === "trasfondos" || sec === "otros" || !sec){ grupo = esMayus(t) ? titulo(t) : t; ultimo = null; continue; }
+      if(sec === "idiomas"){ sub = subcategoria("idiomas", norm(t)) || sub; continue; }
+    }
+    // texto largo con viñeta dentro de un objeto o hechizo: es parte de la descripción anterior
+    if(CONOCIMIENTOS.includes(sec) && ultimo && cuerpo.length > 90 && !/^[^:.]{1,100}:/.test(cuerpo) && !/requiere/i.test(cuerpo.slice(0,100))){ anexar(cuerpo); continue; }
+
+    const i = dosPuntos(cuerpo);
+    const clave = i > 0 ? cuerpo.slice(0, i).trim() : sinPunto(cuerpo);
+    const valor = i > 0 ? sinPunto(cuerpo.slice(i+1)) : "";
+
+    // combate y puntos se reconocen por nombre en cualquier parte de la ficha ("→ PAs: base 17 + ... = 26", "→ Puntos de Pociones: ... =13")
+    const ck = slug(clave);
+    const pm = ck.match(/^(perdida_de_)?puntos_de_(pociones|rituales|destino)$/);
+    if(pm){ f.puntos[pm[1] ? "perdida_destino" : pm[2]] = numeroFinal(valor); continue; }
+    if(ck in COMBATE_KEYS && (!sec || ["combate","habilidades","atributos","otros"].includes(sec)) && (/^\s*-?\d+/.test(valor) || /=\s*-?\d+/.test(valor)) && !parseNivel(valor, true)){
+      if(forma && !f._formaPrincipal) f._formaPrincipal = forma;
+      const destino = (!forma || forma === f._formaPrincipal) ? f.combate : (f.combate_formas[forma] ||= {});
+      destino[COMBATE_KEYS[ck]] = numeroFinal(valor);
+      continue;
+    }
+
+    switch(sec || "otros"){
+      case "atributos": {
+        if(/^l[ií]mites?/i.test(clave)){ f.limites = valor; break; }
+        const ka = slug(clave.replace(/\([^)]*\)/g, ""));
+        if(!ATRIBUTOS.includes(ka)) break;
+        if((TALENTOSO.test(clave) || TALENTOSO.test(valor)) && !f.talentosos.includes(ka)) f.talentosos.push(ka);
+        const rv = valor.match(/^\s*([IVX]{1,4})\b/);
+        const n = rv ? ROMANOS[rv[1]] : parseInt((valor.match(/[+-]?\d+/) || [])[0], 10);
+        if(n != null && !isNaN(n)) f.atributos[ka] = n;
+        break;
+      }
+      case "habilidades": {
+        if(/_{2,}/.test(clave) && /\+0|desentrenado/i.test(valor)) break;
+        const nv = parseNivel(valor, true);
+        let k = slug(clave.replace(/arte\s*\/\s*artesan[ií]a/i, "artesania"));
+        let nombre = clave.replace(/\s+/g, " ");
+        if(arte && !HABILIDADES.has(k) && !/arte|artesan/i.test(clave)){ nombre = `Arte / Artesanía (${clave})`; k = "artesania_" + k; }
+        else if(HABILIDADES.has(k)) arte = false;
+        const g = grupo || "otras";
+        (f.habilidades[g] ||= {});
+        if(nv){
+          f.habilidades[g][k] = {nombre, nivel: nv.nivel, bono: nv.bono};
+          f.bonos[k] = nv.bono;
+          if(nv.bono !== nv.esperado) f._avisos.push(`${nombre}: ${nv.nivel} figura con +${nv.bono}; en el sistema es +${nv.esperado}.`);
+        } else if(valor){
+          f.habilidades[g][k] = {nombre, nivel: valor, bono: null};
+          f._avisos.push(`${nombre}: no se reconoció el nivel "${valor}".`);
+        }
+        break;
+      }
+      case "combate": {
+        // la primera forma ("HUMANO") es el combate principal; las demás ("LICÁNTROPO") van aparte
+        if(forma && !f._formaPrincipal) f._formaPrincipal = forma;
+        const destino = (!forma || forma === f._formaPrincipal) ? f.combate : (f.combate_formas[forma] ||= {});
+        const kc = slug(clave).replace(/^valor_de_/, "").replace(/^pvs?$/, "pas");
+        const n = numeroFinal(valor);
+        if(kc in COMBATE_KEYS && n != null) destino[COMBATE_KEYS[kc]] = n;
+        break;
+      }
+      case "hechizos": case "pociones": case "rituales": case "objetos": case "quidditch":
+        empujar(lista(f[sec], sub || "otros"), parseConocimiento(cuerpo)); break;
+      case "armas": {
+        const t = norm(sinPunto(cuerpo));
+        if(/^(caracteristicas|runas)$/.test(t)){ armaSub = t; break; }
+        const o = parseConocimiento(cuerpo), arma = f.armas[f.armas.length - 1];
+        if(armaSub && arma) empujar(arma[armaSub] ||= [], o);
+        else { armaSub = null; empujar(f.armas, o); }
+        break;
+      }
+      case "trasfondos":
+        if(grupo && /^ventajas?$/i.test(grupo)) empujar(f.ventajas, parseVentaja(cuerpo));
+        else {
+          const tf = parseTrasfondo(cuerpo, grupo, f.personaje);
+          if(tf.tipo) empujar(f.trasfondos, tf);
+          else if(ultimo) anexar(sinPunto(cuerpo));
+        }
+        break;
+      case "ventajas": empujar(f.ventajas, parseVentaja(cuerpo)); break;
+      case "raza": f.raza = valor ? {nombre: clave, descripcion: valor} : {nombre: clave}; ultimo = f.raza; break;
+      case "idiomas": empujar(f.idiomas, parseIdioma(cuerpo, sub)); break;
+      case "especializaciones": {
+        const e = parseEspecializacion(cuerpo);
+        if(e.clave) f.especializaciones[e.clave] = Math.max(f.especializaciones[e.clave] || 0, e.nivel || 1);
+        break;
+      }
+      case "talentos": empujar(lista(f.talentos, sub || "generales"), parseTalento(cuerpo)); break;
+      case "titulos": {
+        const ult = f.titulos[f.titulos.length - 1];
+        const solo = sinPunto(cuerpo.replace(/^[-–—]\s*/, ""));
+        const cm = solo.match(CALIF);
+        // "- Extraordinario." en su propia línea: es la nota del título anterior
+        if(ult && !ult.calificacion && cm && cm.index === 0 && solo.length - cm[0].length < 3){ ult.calificacion = esMayus(cm[0]) ? cap(cm[0]) : cm[0]; break; }
+        const t = parseTitulo(cuerpo);
+        if(!t.examen && ult && ult.examen && !t.calificacion && /:\s*$/.test(cuerpo)){
+          // "EXTASIS: …" seguido de "Materia:" / "- Nota"
+          t.examen = ult.examen;
+          if(!ult.materia && !ult.calificacion) f.titulos.pop();
+        }
+        empujar(f.titulos, t); break;
+      }
+      case "proezas": { const hk = slug(clave); const o = {atributo: grupo || HAB_ATR[hk] || (/arte|artesan/i.test(clave) ? "voluntad" : null), habilidad: clave}; if(valor) o.descripcion = valor; empujar(f.proezas, o); break; }
+      default: break;
+    }
+  }
+
+  for(const x of fichas){
+    if(x.datos.nombre) x.personaje = x.datos.nombre;
+    x.personaje = (x.personaje || "").replace(/^ficha\s+de\s+/i, "").replace(SIMBOLOS_FIN, "").trim();
+  }
+  if(autor && fichas.length === 1 && (!fichas[0].personaje || /avada kedavra/i.test(fichas[0].personaje))) fichas[0].personaje = autor;
+  for(const x of fichas){
+    // solo cuentan los trasfondos generales: los específicos (Biblioteca Medicina > Enfermedades mágicas) son un bonificador, no otro trasfondo
+    const claveT = t => [t.tipo, norm(t.general || ""), t.identidad || ""].join("|");
+    const generales = x.trasfondos.filter(t => !t.especifica);
+    const hay = new Set(generales.map(claveT));
+    for(const t of x.trasfondos) if(t.especifica && !hay.has(claveT(t)))
+      x._avisos.push(`${t.tipo} ${t.general || ""} > ${t.especifica}${t.identidad ? " (" + t.identidad + ")" : ""} es un trasfondo específico sin su general en la ficha; no se copió.`);
+    // sin duplicados (mismo tipo, general e identidad): queda el de nivel más alto
+    const unicos = new Map();
+    for(const t of generales){ const k = claveT(t); if(!unicos.has(k) || (t.nivel || 0) > (unicos.get(k).nivel || 0)) unicos.set(k, t); }
+    x.trasfondos = [...unicos.values()];
+    const faltan = ATRIBUTOS.filter(a => !(a in x.atributos));
+    if(!Object.keys(x.atributos).length) x._avisos.push("No se encontraron atributos.");
+    else if(faltan.length) x._avisos.push(`Faltan atributos: ${faltan.join(", ")}.`);
+    if(!x.personaje) x._avisos.push("Sin nombre: agregá “Nombre y Apellido:” o poné el nombre en MAYÚSCULAS en la primera línea.");
+    for(const [k, n] of Object.entries(x._esperados)){
+      const [s, sb] = k.split(".");
+      const real = (x[s]?.[sb] || []).length;
+      if(real !== n) x._avisos.push(`${cap(s)} ${sb}: el encabezado dice ${n} y se leyeron ${real}.`);
+    }
+  }
+  return fichas.filter(x => x.personaje || Object.keys(x.atributos).length || Object.keys(x.bonos).length || Object.keys(x.combate).length || Object.keys(x.puntos).length);
+}
+
+
+/* ---------- salida ---------- */
+const ORDEN = ["personaje","datos","raza","limites","atributos","talentosos","habilidades","bonos","combate","combate_formas","puntos","especializaciones",
+  "hechizos","pociones","rituales","objetos","armas","quidditch","talentos","trasfondos","ventajas","idiomas","titulos","proezas","textos"];
+const vacio = v => v == null || (Array.isArray(v) ? !v.length : typeof v === "object" && !Object.keys(v).length);
+function limpiar(f){
+  const o = {};
+  for(const k of ORDEN) if(k === "personaje" || !vacio(f[k])) o[k] = f[k];
+  return o;
+}
+const conDesc = () => $("descripciones").checked;
+const replacer = (k, v) => ((k === "descripcion" || k === "textos") && !conDesc()) ? undefined : v;
+
+function resaltar(json){
+  return json.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))
+    .replace(/("(?:\\.|[^"\\])*")(\s*:)?|\b(-?\d+)\b/g, (m, str, colon, num) => {
+      if(str) return colon ? `<span class="k">${str}</span>${colon}` : `<span class="s">${str}</span>`;
+      return `<span class="n">${num}</span>`;
+    });
+}
+
+/* código: JSON comprimido (deflate) en base64url con prefijo AVK1. */
+const b64url = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(b)); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); };
+const desdeB64url = t => { const s = atob(t.replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from(s, c => c.charCodeAt(0)); };
+async function codificar(json){
+  const datos = new TextEncoder().encode(json);
+  if(typeof CompressionStream === "undefined") return "AVK0." + b64url(datos);
+  const buf = await new Response(new Blob([datos]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer();
+  return "AVK1." + b64url(new Uint8Array(buf));
+}
+async function decodificar(codigo){
+  const [pre, cuerpo] = codigo.trim().split(".");
+  const bytes = desdeB64url(cuerpo);
+  if(pre === "AVK0") return JSON.parse(new TextDecoder().decode(bytes));
+  const buf = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
+  return JSON.parse(new TextDecoder().decode(buf));
+}
+
+let ultimoJSON = "", ultimoCodigo = "", ultimasFichas = [], tabActual = "json", ronda = 0;
+async function render(fichasCrudas, fuente){
+  ultimasFichas = fichasCrudas;
+  const datos = fichasCrudas.map(limpiar);
+  const obj = datos.length === 1 ? datos[0] : datos;
+  ultimoJSON = datos.length ? JSON.stringify(obj, replacer, $("compacto").checked ? 0 : 2) : "";
+  $("salida").innerHTML = ultimoJSON ? resaltar(ultimoJSON) : '<span style="color:var(--muted)">Pegá una ficha para ver el JSON.</span>';
+
+  const avisos = fichasCrudas.flatMap(f => (f._avisos || []).map(a => (fichasCrudas.length > 1 && f.personaje ? f.personaje + " · " : "") + a));
+  const ul = $("avisos"); ul.innerHTML = "";
+  avisos.forEach(a => { const li = document.createElement("li"); li.textContent = a; ul.appendChild(li); });
+  ul.hidden = !avisos.length;
+
+  const nHab = fichasCrudas.reduce((t,f) => t + Object.keys(f.bonos || {}).length, 0);
+  $("status").innerHTML = datos.length
+    ? `<span>Fichas: <b>${datos.length}</b></span><span>Habilidades: <b>${nHab}</b></span><span>Avisos: <b>${avisos.length}</b></span>${fuente ? `<span>${fuente}</span>` : ""}`
+    : "<span>Esperando una ficha.</span>";
+
+  renderResumen(fichasCrudas);
+
+  const mia = ++ronda;
+  ultimoCodigo = "";
+  $("codigo").textContent = ultimoJSON ? "Generando…" : "Pegá una ficha para generar el código.";
+  if(ultimoJSON){
+    const cod = await codificar(JSON.stringify(obj, replacer));
+    if(mia !== ronda) return;
+    ultimoCodigo = cod;
+    $("codigo").textContent = cod;
+  }
+}
+
+function contar(o){ return o ? Object.values(o).reduce((t, v) => t + (Array.isArray(v) ? v.length : 0), 0) : 0; }
+function renderResumen(fichas){
+  const r = $("resumen"); r.innerHTML = "";
+  fichas.forEach(f => {
+    const d = document.createElement("div"); d.className = "pj";
+    const h = document.createElement("h3"); h.textContent = (f.personaje || "(sin nombre)") + (f.raza?.nombre ? " · " + f.raza.nombre : ""); d.appendChild(h);
+    const at = document.createElement("div"); at.className = "attrs";
+    Object.entries(f.atributos || {}).forEach(([k,v]) => {
+      const c = document.createElement("div"); c.className = "attr"; c.innerHTML = "<span></span><b></b>";
+      c.firstChild.textContent = cap(k) + ((f.talentosos || []).includes(k) ? " (T)" : ""); c.lastChild.textContent = v; at.appendChild(c);
+    });
+    d.appendChild(at);
+    const cuentas = [["Hechizos", contar(f.hechizos)], ["Pociones", contar(f.pociones)], ["Rituales", contar(f.rituales)],
+      ["Objetos", contar(f.objetos)], ["Talentos", contar(f.talentos)], ["Trasfondos", (f.trasfondos || []).length],
+      ["Ventajas", (f.ventajas || []).length], ["Idiomas", (f.idiomas || []).length], ["Armas", (f.armas || []).length], ["Jugadas de Quidditch", contar(f.quidditch)], ["Especializaciones", Object.keys(f.especializaciones || {}).length],
+      ["Proezas", (f.proezas || []).length]].filter(([, n]) => n);
+    if(cuentas.length){
+      const cc = document.createElement("div"); cc.className = "counts";
+      cuentas.forEach(([t, n]) => { const s = document.createElement("span"); s.className = "chip"; s.innerHTML = "<span></span> <b></b>"; s.firstChild.textContent = t; s.lastChild.textContent = n; cc.appendChild(s); });
+      d.appendChild(cc);
+    }
+    const hb = document.createElement("div"); hb.className = "hab";
+    Object.values(f.habilidades || {}).forEach(g => Object.values(g).forEach(x => {
+      if(!x.bono) return;
+      const row = document.createElement("div"); row.innerHTML = "<span></span><span></span>";
+      row.firstChild.textContent = x.nombre; row.lastChild.textContent = `${x.nivel} +${x.bono}`; hb.appendChild(row);
+    }));
+    d.appendChild(hb); r.appendChild(d);
+  });
+}
+
+async function procesar(){
+  const texto = $("entrada").value;
+  try{ localStorage.setItem("lector-fichas-borrador", texto); }catch(e){}
+  if(/^\s*AVK[01]\.[A-Za-z0-9_-]+\s*$/.test(texto)){
+    try{
+      const d = await decodificar(texto);
+      const lista = (Array.isArray(d) ? d : [d]).map(x => ({...x, _avisos: []}));
+      render(lista, "Leída desde código");
+    }catch(e){ render([]); toast("El código está incompleto o dañado"); }
+    return;
+  }
+  render(parsear(texto));
+}
+
+let t; $("entrada").addEventListener("input", () => { clearTimeout(t); t = setTimeout(procesar, 250); });
+$("compacto").addEventListener("change", () => render(ultimasFichas));
+$("descripciones").addEventListener("change", () => render(ultimasFichas));
+$("btn-ejemplo").addEventListener("click", () => { $("entrada").value = EJEMPLO; procesar(); });
+$("btn-limpiar").addEventListener("click", () => { $("entrada").value = ""; procesar(); $("entrada").focus(); });
+$("btn-archivo").addEventListener("click", () => $("archivo").click());
+$("archivo").addEventListener("change", e => {
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  const lector = new FileReader();
+  lector.onload = () => { $("entrada").value = String(lector.result || ""); procesar(); toast("Archivo cargado: " + file.name); };
+  lector.onerror = () => toast("No se pudo leer el archivo");
+  lector.readAsText(file);
+  e.target.value = "";
+});
+
+function tab(cual){
+  tabActual = cual;
+  [["json","tab-json","salida"],["cod","tab-cod","codigo"],["res","tab-res","resumen"]].forEach(([k, b, p]) => {
+    $(b).setAttribute("aria-selected", k === cual); $(p).hidden = k !== cual;
+  });
+  $("btn-copiar").textContent = cual === "cod" ? "Copiar código" : "Copiar JSON";
+}
+$("tab-json").addEventListener("click", () => tab("json"));
+$("tab-cod").addEventListener("click", () => tab("cod"));
+$("tab-res").addEventListener("click", () => tab("res"));
+
+function toast(msg){ const el = $("toast"); el.textContent = msg; el.classList.add("show"); setTimeout(() => el.classList.remove("show"), 1800); }
+$("btn-copiar").addEventListener("click", () => {
+  const esCodigo = tabActual === "cod";
+  const texto = esCodigo ? ultimoCodigo : ultimoJSON;
+  if(!texto){ toast("Todavía no hay nada para copiar"); return; }
+  navigator.clipboard.writeText(texto).then(() => toast(esCodigo ? "Código copiado" : "JSON copiado")).catch(() => {
+    if(!esCodigo) tab("json");
+    const sel = window.getSelection(), rg = document.createRange();
+    rg.selectNodeContents($(esCodigo ? "codigo" : "salida")); sel.removeAllRanges(); sel.addRange(rg);
+    toast("Seleccionado: copialo con Ctrl+C");
+  });
+});
+
+
+let inicial = null; try{ inicial = localStorage.getItem("lector-fichas-borrador"); }catch(e){}
+$("entrada").value = inicial || EJEMPLO;
+procesar();
+</script>
+
+<script type="module">
+/* =====================================================================
+   FIREBASE · pegá acá tu firebaseConfig (Configuración del proyecto →
+   Tus apps → app web). Es normal que estos datos queden visibles.
+   ===================================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCzTfW6c4OltResFNP6FJ5-MV36Bz7iI74",
+  authDomain: "trackerdefichas.firebaseapp.com",
+  projectId: "trackerdefichas",
+  storageBucket: "trackerdefichas.firebasestorage.app",
+  messagingSenderId: "886445486854",
+  appId: "1:886445486854:web:2812a46e0e4fdfa0d32487"
+};
+/* ===================================================================== */
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const $ = id => document.getElementById(id);
+const configurado = !String(FIREBASE_CONFIG.apiKey).startsWith("PEGAR");
+const db = configurado ? getFirestore(initializeApp(FIREBASE_CONFIG)) : null;
+// Código corto: AK + 5 números (ej. AK48213)
+function codigoCorto(){
+  return "AK" + String(Math.floor(Math.random() * 100000)).padStart(5, "0");
+}
+const normalizarCorto = t => (t || "").toUpperCase().replace(/[^A-Z0-9]/g, "");   // acepta "ak-48213", "AK 48213"
+function sinConfig(){
+  $("nube-estado").textContent = "Falta completar apiKey y appId en el FIREBASE_CONFIG del archivo (están como PEGAR_AQUI).";
+  toast("Falta completar el firebaseConfig");
+}
+function explicarError(e){
+  const c = (e && e.code) || "";
+  if(c.includes("permission-denied")) return "Firestore rechazó el guardado: revisá que publicaste las reglas nuevas.";
+  if(c.includes("not-found") || c.includes("failed-precondition")) return "No encuentra la base de datos: creá Firestore Database en la consola de Firebase.";
+  if(c.includes("invalid-api-key") || c.includes("api-key")) return "La apiKey no es válida: copiala de nuevo desde la configuración del proyecto.";
+  if(c.includes("unavailable")) return "Sin conexión con Firebase. Probá de nuevo en un momento.";
+  return "No se pudo guardar (" + (c || (e && e.message) || "error desconocido") + ").";
+}
+
+// Guarda el código AVK1 y devuelve el corto
+async function guardarFicha(nombre, codigoAVK){
+  for(let i = 0; i < 6; i++){
+    const c = codigoCorto(), ref = doc(db, "fichas", c);
+    if((await getDoc(ref)).exists()) continue;
+    await setDoc(ref, { ficha: codigoAVK, creada: serverTimestamp() });
+    return c;
+  }
+  throw new Error("sin_codigo");
+}
+// Con el código corto devuelve el AVK1 (o null si no existe)
+async function cargarFicha(c){
+  const s = await getDoc(doc(db, "fichas", normalizarCorto(c)));
+  return s.exists() ? s.data().ficha : null;
+}
+
+$("btn-guardar-nube").addEventListener("click", async () => {
+  if(!configurado) return sinConfig();
+  if(!ultimoCodigo){ toast("Primero pegá una ficha"); return; }
+  const b = $("btn-guardar-nube");
+  b.disabled = true; $("nube-estado").textContent = "Guardando…";
+  try{
+    const nombre = (ultimasFichas[0] && ultimasFichas[0].personaje) || "";
+    const c = await guardarFicha(nombre, ultimoCodigo);
+    $("nube-codigo").textContent = c; $("nube-codigo").hidden = false; $("btn-copiar-corto").hidden = false;
+    $("nube-estado").textContent = "Guardada. Tu código:";
+  }catch(e){
+    console.error(e); $("nube-estado").textContent = explicarError(e);
+  }finally{ b.disabled = false; }
+});
+
+$("btn-copiar-corto").addEventListener("click", () => {
+  const c = $("nube-codigo").textContent;
+  navigator.clipboard.writeText(c).then(() => toast("Código copiado")).catch(() => toast("Seleccionalo y copialo con Ctrl+C"));
+});
+
+async function cargarDesdeCampo(){
+  if(!configurado) return sinConfig();
+  const c = normalizarCorto($("corto-entrada").value);
+  if(!/^AK\d{5}$/.test(c)){ toast("El código tiene que ser como AK48213"); return; }
+  const b = $("btn-cargar-nube"); b.disabled = true;
+  try{
+    const avk = await cargarFicha(c);
+    if(!avk){ toast("No hay ninguna ficha con ese código"); return; }
+    $("entrada").value = avk; await procesar(); toast("Ficha " + c + " cargada");
+  }catch(e){ console.error(e); toast(explicarError(e).replace("guardar", "cargar")); }
+  finally{ b.disabled = false; }
+}
+$("btn-cargar-nube").addEventListener("click", cargarDesdeCampo);
+$("corto-entrada").addEventListener("keydown", e => { if(e.key === "Enter") cargarDesdeCampo(); });
+if(!configurado) $("nube-estado").textContent = "Falta completar apiKey y appId en el FIREBASE_CONFIG del archivo (están como PEGAR_AQUI).";
+</script>
+</body>
+</html>
